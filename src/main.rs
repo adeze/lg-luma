@@ -1,6 +1,6 @@
 mod app_artwork;
 // Used by the TV build's Home lifecycle; the host build compiles it for its tests.
-#[cfg(all(feature = "webos", target_os = "linux"))]
+#[cfg(all(feature = "webos", any(target_os = "linux", test)))]
 #[cfg_attr(not(target_arch = "arm"), allow(dead_code))]
 #[path = "app-subscription.rs"]
 mod app_subscription;
@@ -1272,15 +1272,15 @@ fn run() -> Result<(), String> {
                     mouse_x,
                     mouse_y,
                     ..
-                } if state.overlay.is_none() => {
-                    if state.wheel_scroll(
+                } if state.overlay.is_none()
+                    && state.wheel_scroll(
                         &scene.controls,
                         pointer_position(&window, mouse_x, mouse_y),
                         x,
                         y,
-                    ) {
-                        press = None;
-                    }
+                    ) =>
+                {
+                    press = None;
                 }
                 _ => {}
             }
@@ -1443,7 +1443,7 @@ fn run() -> Result<(), String> {
                     let save = (damage.is_some() && report.1 == 0)
                         .then(|| std::path::Path::new("/tmp/luma-damage-check"));
                     let (differing, largest) =
-                        renderer.verify_window(&scene.draw, width, height, save);
+                        renderer.verify_window(&scene.draw, width, height, save)?;
                     report.0 += 1;
                     if differing > 0 {
                         report.1 += 1;

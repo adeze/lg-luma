@@ -16,49 +16,84 @@ dist/                        Generated ARM IPK, checksum and Homebrew feed
 .build/                      Generated assets, SDK/runtime caches and rendering diagnostics
 ```
 
-React, JSX, Vite, browser tests and web rendering are no longer part of the project. Node/pnpm
-remain build/deployment tools for Sharp, the webOS CLI and formatting/linting. The installed app
+React, JSX, Vite, browser tests and web rendering are no longer part of the project. Bun
+runs build/deployment tooling for Sharp, the webOS CLI and formatting/linting. The installed app
 is the Rust executable `luma`, with app ID `com.ecklf.luma`.
 
 ## Toolchain and commands
 
 ```sh
 nix develop
-pnpm install --frozen-lockfile
-pnpm assets
-pnpm dev
+bun install --frozen-lockfile
+bun run assets
+bun run dev
 ```
 
-The flake supplies Rust 1.93, Cargo/rustfmt/Clippy, Node.js 24, pnpm 10.34.5, SDL2, pkg-config,
+The flake reads Rust 1.99.1 from `rust-toolchain.toml` and supplies Cargo/rustfmt/Clippy,
+Bun 1.4.4, SDL2, glslang, pkg-config,
 woff2, Python/fontTools, CMake and Git. Linux includes Mesa and Xvfb. Supported Nix hosts are
-Apple Silicon macOS and ARM64/x86-64 Linux. Without Nix, supply those tools and Rust 1.88+,
+Apple Silicon macOS and ARM64/x86-64 Linux. Without Nix, supply those tools and Rust 1.99+,
 including `armv7-unknown-linux-gnueabi` for TV builds. No browser installation is needed.
 
-| Command                   | Purpose                                                    |
-| ------------------------- | ---------------------------------------------------------- |
-| `pnpm dev [--options]`    | Run the desktop preview                                    |
-| `pnpm assets [--4k]`      | Prepare fonts, vector artwork and raster backgrounds       |
-| `pnpm screenshots`        | Capture native Home, Apps, General and Inputs into `docs/` |
-| `pnpm assets:vector`      | Recompile bundled SVG icon/logo meshes                     |
-| `pnpm assets:fonts`       | Restore checksum-pinned Noto font source if needed         |
-| `pnpm sdk`                | Download/relocate a pinned host webOS SDK                  |
-| `pnpm runtime`            | Prepare checksum-pinned SDL-webOS                          |
-| `pnpm build`              | Release ARM cross-build using `WEBOS_NDK`                  |
-| `pnpm run package`        | Assets, cross-build, IPK verification and Homebrew feed    |
-| `pnpm deploy --device tv` | Build/install/launch through an ares device profile        |
-| `pnpm check`              | Oxlint and workspace Clippy, without executing tests       |
-| `pnpm format:check`       | Rust and tooling/document formatting checks                |
-| `pnpm test`               | Release-tooling and Rust workspace unit tests              |
-| `pnpm test:icons`         | Mocked runtime icon reads and bundled vector checks        |
-| `pnpm test:smoke`         | Desktop rendering, mocked weather and localization checks  |
-| `pnpm changeset`          | Add a release note and requested version bump to a PR      |
-| `pnpm version:check`      | Check synchronized app release versions                    |
+| Command                          | Purpose                                                    |
+| -------------------------------- | ---------------------------------------------------------- |
+| `bun run dev [--options]`        | Run the desktop preview                                    |
+| `bun run assets [--4k]`          | Prepare fonts, vector artwork and raster backgrounds       |
+| `bun run screenshots`            | Capture native Home, Apps, General and Inputs into `docs/` |
+| `bun run assets:vector`          | Recompile bundled SVG icon/logo meshes                     |
+| `bun run assets:fonts`           | Restore checksum-pinned Noto font source if needed         |
+| `bun run sdk`                    | Download/relocate a pinned host webOS SDK                  |
+| `bun run runtime`                | Prepare checksum-pinned SDL-webOS                          |
+| `bun run build`                  | Release ARM cross-build using `WEBOS_NDK`                  |
+| `bun run package`                | Assets, cross-build, IPK verification and Homebrew feed    |
+| `bun run deploy --device tv`     | Build/install/launch through an ares device profile        |
+| `bun run check`                  | Tooling types, shader linking, Oxlint and workspace Clippy |
+| `bun run check:binary:container` | Inspect the ARM executable in an isolated Docker image     |
+| `bun run format:check`           | Rust and tooling/document formatting checks                |
+| `bun run test`                   | Release-tooling and Rust workspace unit tests              |
+| `bun run test:icons`             | Mocked runtime icon reads and bundled vector checks        |
+| `bun run test:smoke`             | Desktop rendering, mocked weather and localization checks  |
+| `bun run changeset`              | Add a release note and requested version bump to a PR      |
+| `bun run version:check`          | Check synchronized app release versions                    |
 
 The TV target is ARMv7 **soft-float calling convention**, `gnueabi`, not `gnueabihf`. Codegen
 uses the NDK's Cortex-A9/VFP baseline with NEON disabled for Rust code. Hardware floating point
 is enabled without changing the calling convention; the pinned compiler emits unstable-feature
 warnings for those target switches. `src/webos-compat.rs` implements `getauxval` for the SDK's
 older libc by reading real kernel auxiliary values, used by Rust startup and TLS CPU detection.
+
+Build and packaging both inspect the executable with the SDK's `readelf`: ELF32 little-endian
+ARM EABI5 soft-float, `/lib/ld-linux.so.3`, and imported glibc versions no newer than the C1's
+2.28. `bun run test:build` covers incompatible reports, explicit deployment targets and compiler
+selection when a host Cargo shadows rustup. When rustup is available, TV builds select its
+compiler and Cargo from `rust-toolchain.toml`; Nix uses its pinned toolchain directly.
+
+TypeScript is declared as `latest`; `bun.lock` records the resolved version. `bun run check:types`
+uses strict TypeScript 7 checks for deployment, binary validation, container checks and SDL
+preparation without rewriting these tools or emitting JavaScript. Bun's runtime transpilation
+is not a substitute for this gate.
+
+`bun run check:shaders` compiles and links all nine paint/vector/text shader combinations:
+desktop GLSL 150 and ESSL 100 with highp or mediump fragment precision. Rust and the validator
+share the exact prefix files. The check runs before TV builds and uses glslang, not SPIR-V;
+the TV driver still compiles the shaders at startup and needs physical validation.
+
+After a build, `bun run check:binary:container` builds the checksum-pinned Bun-based checker
+image and inspects the actual executable using Linux `readelf`. The run is unprivileged,
+read-only and network-disabled. It does not execute ARM code, emulate webOS, or validate Luna,
+Wayland, graphics drivers or TV permissions. Docker is a host check dependency, not a TV runtime.
+
+To trial a newer standard-ABI SDL2 runtime, verify its release archive checksum and use the
+existing `WEBOS_NATIVE_LIBS` packaging override with a directory containing only the selected
+shared library. Keep the stable IPK and checksums separately and do not replace the default
+runtime until TV-menu launch, input/hotplug, standby/resume and Home recovery pass on hardware.
+SDL3 requires a separate Rust/SDL API migration; it cannot replace the SDL2 library in an IPK.
+
+Deployment requires an explicit `--device` profile. Before updating a TV using Home takeover,
+disable takeover and keep a verified copy of its previous IPK. Validate the new version through
+the normal app tile before enabling takeover again. The deployment command currently reports
+installation/launch command results; it does not verify the installed hash, foreground app,
+cold-boot recovery or physical behavior. Those checks remain manual.
 
 The NDK's SDL is a link-time stub with Wayland disabled. `tools/webos-runtime.mjs` instead pins
 SDL-webOS `release-2.30.12-webos.5`, standard SDL ABI, with archive/library SHA-256 verification.
@@ -71,12 +106,12 @@ backend. Avoid copying the whole SDK library directory or the TV's graphics driv
 
 ### Documentation screenshots
 
-`pnpm screenshots` generates `docs/home.png`, `docs/apps.png`, `docs/settings.png` and
+`bun run screenshots` generates `docs/home.png`, `docs/apps.png`, `docs/settings.png` and
 `docs/inputs.png`, linked by the README. It builds the desktop executable without the TV feature,
 uses isolated temporary preferences, sample inventory and a fixed date/time, and captures actual
 1920×1080 OpenGL framebuffers. Weather is unconfigured, so no real weather APIs are contacted.
 It does not execute the test suites. A desktop display is required; on headless Linux use
-`xvfb-run -a pnpm screenshots`. These images document the native design, not TV hardware behavior.
+`xvfb-run -a bun run screenshots`. These images document the native design, not TV hardware behavior.
 
 ### Input
 
@@ -191,7 +226,7 @@ bounded reader.
 Desktop preview uses in-memory sample history and simulated mutations, with no TV calls:
 
 ```sh
-pnpm dev --script recents,await-recents
+bun run dev --script recents,await-recents
 ```
 
 `hold-back` is also a scripted opening action. Desktop smoke scenarios render normal, close-one,
@@ -200,7 +235,7 @@ presses, stale responses, failures, navigation, reduced motion, reversible cross
 
 ## Splash images
 
-`pnpm assets` renders one 1920×1080 PNG per background into `.build/assets/splash/` from the shaded
+`bun run assets` renders one 1920×1080 PNG per background into `.build/assets/splash/` from the shaded
 wallpapers. `tools/package.mjs` ships them under `splash/` plus `splash.png` (the default background),
 which `appinfo.json` names as `splashBackground`, with `bgColor` set to the UI base colour so the
 frame between the splash and the first draw is not black. On a normal TV launch and after successful
@@ -214,7 +249,7 @@ copies the selected background's splash into the staged Home app on every apply,
 preferences from the TV storage candidates in `storage.rs`. Production installations prefer internal
 storage; developer installations prefer developer storage, with existing files taking precedence over
 the legacy installation-local preferences. Reapplying an active Home mount also refreshes the splash.
-`pnpm test:home` checks splash selection, runtime updates and mounted refreshes with a mocked filesystem
+`bun run test:home` checks splash selection, runtime updates and mounted refreshes with a mocked filesystem
 and no TV calls. Verify the system-rendered splash on a real TV by changing Background, quitting Luma,
 and relaunching its normal tile; desktop checks cannot establish SAM/compositor image caching behavior.
 
@@ -297,11 +332,11 @@ and the [UK streaming catalogue](https://github.com/tjeffree/webOS-Streaming-Agg
 These sources do not establish that every alias is available on every region/firmware combination.
 
 Every curated logo has an app in `demo_inventory()`, including all 27 expanded streaming/music
-brands. Open them with `pnpm dev --script apps`, then scroll or search the Apps grid. A unit check
-keeps the SVG directory, curated catalogue and demo inventory aligned. `pnpm test:brands` renders
+brands. Open them with `bun run dev --script apps`, then scroll or search the Apps grid. A unit check
+keeps the SVG directory, curated catalogue and demo inventory aligned. `bun run test:brands` renders
 every card through the actual desktop renderer and writes `.build/brands-gallery.png` for visual
 review. Like the other smoke scripts, it uses isolated preferences and no TV or real weather API.
-The gallery also runs as part of `pnpm test:smoke`. Asset source/licence details are in [assets.md](assets.md).
+The gallery also runs as part of `bun run test:smoke`. Asset source/licence details are in [assets.md](assets.md).
 
 Live TV (`com.webos.app.livetv`) and Web Browser (`com.webos.app.browser`) also have dedicated
 SVG-backed demo cards: a blue/cyan TV display with a live indicator, and a matching globe with a
@@ -337,15 +372,15 @@ native surface request, not a guaranteed panel-output mode. The TV compositor ca
 rescale it. A 4K screenshot or drawable alone does not prove 1:1 panel presentation.
 
 ```sh
-pnpm dev --resolution 4k --profile-frames 180 --diagnostics .build/profile.json
-pnpm dev --script 'home,down' --frames 90 --capture-scale 2 --screenshot .build/home-4k.png
+bun run dev --resolution 4k --profile-frames 180 --diagnostics .build/profile.json
+bun run dev --script 'home,down' --frames 90 --capture-scale 2 --screenshot .build/home-4k.png
 ```
 
 `--resolution` also accepts `1080p` or `WIDTHxHEIGHT`. Explicit TV requests use a borderless
 window, avoiding SDL desktop-fullscreen overriding the dimensions. `--capture-scale 2` uses a
 separate 3840×2160 offscreen target and leaves the actual window unchanged. Font/vector geometry
 uses that target's physical coverage rather than enlarging a 1080p image. Optional `@2x` wallpaper
-images need both `pnpm assets --4k` and `node tools/package.mjs --4k`; default packages exclude
+images need both `bun run assets --4k` and `bun tools/package.mjs --4k`; default packages exclude
 them even if they remain in an old cache. Source photographic detail still limits sharpness.
 
 ### 4K TV investigation
@@ -434,7 +469,10 @@ the whole frame, as does `LUMA_PARTIAL=0`. The startup log names the mode
 
 `LUMA_DAMAGE_VERIFY=1` compares every frame with the same scene drawn in full offscreen at the
 window's sample count and reports differing pixels in the diagnostics (`damage_verify`, with the
-full frames as baseline). `--profile-frames` diagnostics include `redrawn_fraction_mean` and a
+full frames as baseline). This diagnostic requires OpenGL 3 or OpenGL ES 3 framebuffer support;
+requesting it on the TV's GLES2 context exits with an explicit error instead of running an
+unsupported comparison. Ordinary rendering and partial redraw do not require it.
+`--profile-frames` diagnostics include `redrawn_fraction_mean` and a
 per-frame `timeline` of interval, compose, render and swap time and redrawn share.
 
 Full-screen translucent fills drawn straight over the wallpaper (the Recents backdrop and
@@ -621,7 +659,7 @@ nativeLifeCycleInterfaceVersion` at startup there, without effect. That the comp
 ## Manual extra-app preview
 
 ```sh
-pnpm dev --test-extra-apps 120
+bun run dev --test-extra-apps 120
 ```
 
 On the TV, add `--test-extra-apps 120` after the JSON argument in the jailed command above.
@@ -684,17 +722,17 @@ for navigation, persistence, pointer input, translations/CJK, weather limits/cac
 profiling. They contact no live weather APIs or television. On Linux:
 
 ```sh
-pnpm format:check
-pnpm check
-pnpm test
-pnpm assets
-xvfb-run -a pnpm test:smoke
+bun run format:check
+bun run check
+bun run test
+bun run assets
+xvfb-run -a bun run test:smoke
 ```
 
 CI uses this native-only flow, then cross-links with a pinned Linux SDK, inspects/normalizes the
 actual ARM IPK and generates checksums/feed. It uploads release/rendering artifacts on PRs,
-main-branch pushes and manual runs. `pnpm check` also validates synchronized release versions,
-and `pnpm test:release` covers version synchronization and the publish gate, including the real
+main-branch pushes and manual runs. `bun run check` also validates synchronized release versions,
+and `bun run test:release` covers version synchronization and the publish gate, including the real
 Changesets version command in an isolated fixture. Host CI cannot prove hardware compatibility,
 small-text quality or presentation frame rate.
 
@@ -724,7 +762,7 @@ run independently.
 Add a changeset to feature/fix PRs that should be included in the next app release:
 
 ```sh
-pnpm changeset
+bun run changeset
 ```
 
 Select `lg-luma`, choose patch/minor/major and describe the change. Commit the generated file
@@ -744,7 +782,7 @@ installing dependencies or running code from the PR.
 
 After changesets merge into `main`, `.github/workflows/release-pr.yml` creates or updates the
 **Version Packages** PR on `changeset-release/main`. Changesets combines the pending notes using
-the highest requested bump. The custom `pnpm version:release` command updates `package.json`
+the highest requested bump. The custom `bun run version:release` command updates `package.json`
 and `CHANGELOG.md`, then synchronizes `appinfo.json`, the root `Cargo.toml`, the `luma` entry in
 `Cargo.lock`, and the versioned IPK examples in `readme.md`. Dependency pins and supporting Rust
 crate versions are preserved. The package stays private and is never published to npm.
@@ -761,9 +799,9 @@ unmerged PRs and manual CI runs do not publish. To retry a failed publication, r
 CI run for the merged version PR's main-branch commit.
 
 Publication retains the existing guards: an already-published version is skipped, a draft can be
-resumed, and a tag pointing at another commit requires a new app version. `pnpm version:check`
-checks synchronization without writing files. `pnpm version:sync` repairs metadata from the
-current `package.json` version without calculating a bump. `pnpm version:release` is reserved for
+resumed, and a tag pointing at another commit requires a new app version. `bun run version:check`
+checks synchronization without writing files. `bun run version:sync` repairs metadata from the
+current `package.json` version without calculating a bump. `bun run version:release` is reserved for
 the automated version PR.
 
 Homebrew Channel's details page reads `packages[].shortDescription` (or `fullDescriptionUrl`),

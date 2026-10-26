@@ -341,15 +341,13 @@ impl State {
                     && app.title.to_lowercase().contains(&query)
             })
             .collect();
-        apps.sort_by(|a, b| {
-            let rank = |app: &App| {
+        apps.sort_by_cached_key(|app| {
+            (
                 ids.iter()
                     .position(|id| id == &app.id)
-                    .unwrap_or(usize::MAX)
-            };
-            rank(a)
-                .cmp(&rank(b))
-                .then_with(|| a.title.to_lowercase().cmp(&b.title.to_lowercase()))
+                    .unwrap_or(usize::MAX),
+                app.title.to_lowercase(),
+            )
         });
         apps
     }

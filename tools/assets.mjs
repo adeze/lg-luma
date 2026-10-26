@@ -21,9 +21,12 @@ const font = path.join(out, 'font.woff2');
 await fs.copyFile(path.join(source, 'fonts/inter-latin.woff2'), font);
 const decoded = spawnSync('woff2_decompress', [font], { encoding: 'utf8' });
 if (decoded.error || decoded.status !== 0) {
-  throw new Error('Font conversion needs woff2_decompress. Run pnpm assets inside nix develop.', {
-    cause: decoded.error ?? new Error(decoded.stderr),
-  });
+  throw new Error(
+    'Font conversion needs woff2_decompress. Run bun run assets inside nix develop.',
+    {
+      cause: decoded.error ?? new Error(decoded.stderr),
+    },
+  );
 }
 await fs.rm(font);
 const cjk = path.join(source, 'fonts/noto-sans-sc.ttf');
@@ -32,7 +35,7 @@ try {
   await fs.access(cjk);
   await fs.access(hangul);
 } catch {
-  throw new Error('Prepare the bundled Chinese and Korean fonts with pnpm assets:fonts first.');
+  throw new Error('Prepare the bundled Chinese and Korean fonts with bun run assets:fonts first.');
 }
 const weights = spawnSync(
   'python3',
@@ -42,7 +45,7 @@ const weights = spawnSync(
   },
 );
 if (weights.error || weights.status !== 0) {
-  throw new Error('Font weights need Python/fontTools. Run pnpm assets inside nix develop.', {
+  throw new Error('Font weights need Python/fontTools. Run bun run assets inside nix develop.', {
     cause: weights.error ?? new Error(weights.stderr),
   });
 }

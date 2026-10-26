@@ -245,6 +245,47 @@ fn inventory_visibility_cases_match_the_launcher_filters() {
 }
 
 #[test]
+fn app_sort_keeps_favorite_order_case_insensitive_ties_and_hidden_filtering() {
+    let mut state = ready();
+    state.inventory.apps = normalize_apps(&json!([
+        {"id":"zulu","title":"Zulu"},
+        {"id":"first-alpha","title":"alpha"},
+        {"id":"second-alpha","title":"ALPHA"},
+        {"id":"pinned-a","title":"A favorite"},
+        {"id":"pinned-b","title":"Z favorite"},
+        {"id":"hidden","title":"Hidden"}
+    ]))
+    .unwrap();
+    state.preferences.favorites = Some(vec!["pinned-b".into(), "pinned-a".into()]);
+    state.preferences.hidden = vec!["hidden".into()];
+    state.open(1);
+    let ids = |state: &State| {
+        state
+            .apps()
+            .iter()
+            .map(|app| app.id.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        ids(&state),
+        [
+            "pinned-b",
+            "pinned-a",
+            "first-alpha",
+            "second-alpha",
+            "zulu"
+        ]
+    );
+    state.query = "ALPHA".into();
+    assert_eq!(ids(&state), ["first-alpha", "second-alpha"]);
+    state.query.clear();
+    state.filter = 5;
+    assert_eq!(ids(&state), ["hidden"]);
+    state.open(0);
+    assert_eq!(ids(&state), ["pinned-b", "pinned-a"]);
+}
+
+#[test]
 fn asset_loading_and_unknown_app_cards_do_not_require_collected_artwork() {
     let root = std::env::temp_dir().join(format!("luma-assets-no-dumps-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();

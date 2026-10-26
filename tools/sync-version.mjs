@@ -63,7 +63,7 @@ export async function syncVersions(directory = root, { check = false } = {}) {
   const changed = filenames.filter((_filename, index) => sources[index] !== updated[index]);
   if (check && changed.length) {
     throw new Error(
-      `Release versions are out of sync: ${changed.join(', ')}. Run pnpm version:sync.`,
+      `Release versions are out of sync: ${changed.join(', ')}. Run bun run version:sync.`,
     );
   }
   if (!check) {

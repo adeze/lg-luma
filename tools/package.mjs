@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { prepareWebosRuntime, verifyWebosSdl } from './webos-runtime.mjs';
 import { normalizeAndVerifyPackage } from './ipk.mjs';
+import { verifyWebosExecutable } from './verify-webos.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
 const highResolution = process.argv.includes('--4k');
@@ -21,6 +22,14 @@ if (
 }
 const binary = path.join(root, 'target/armv7-unknown-linux-gnueabi/release/luma');
 const bytes = await fs.readFile(binary);
+verifyWebosExecutable(
+  binary,
+  path.join(
+    process.env.WEBOS_NDK ??
+      path.join(root, '.build/toolchain/arm-webos-linux-gnueabi_sdk-buildroot'),
+    'bin/arm-webos-linux-gnueabi-readelf',
+  ),
+);
 if (
   bytes.length < 52 ||
   bytes.subarray(0, 4).toString('hex') !== '7f454c46' ||
@@ -41,7 +50,7 @@ try {
     await fs.readFile(path.join(out, 'assets/vector-artwork.json'), 'utf8'),
   );
 } catch (error) {
-  throw new Error('Prepare vector artwork with pnpm assets:vector before packaging.', {
+  throw new Error('Prepare vector artwork with bun run assets:vector before packaging.', {
     cause: error,
   });
 }

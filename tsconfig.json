@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "skipLibCheck": true,
+    "types": ["bun"]
+  },
+  "files": [
+    "tools/deploy.mjs",
+    "tools/check-container.mjs",
+    "tools/verify-webos.mjs",
+    "tools/webos-runtime.mjs"
+  ]
+}

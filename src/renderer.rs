@@ -109,6 +109,35 @@ struct TextRun {
     frame: u64,
 }
 
+struct Uniforms {
+    aa: GLint,
+    texture: GLint,
+    edge_fade: GLint,
+    edge_fade_x: GLint,
+    fringe: GLint,
+    embolden: GLint,
+    transform: GLint,
+    pixel_scale: GLint,
+    tint: GLint,
+}
+
+impl Uniforms {
+    fn new(program: GLuint) -> Self {
+        let location = |name: &CStr| unsafe { gl::GetUniformLocation(program, name.as_ptr()) };
+        Self {
+            aa: location(c"u_aa"),
+            texture: location(c"u_texture"),
+            edge_fade: location(c"u_edge_fade"),
+            edge_fade_x: location(c"u_edge_fade_x"),
+            fringe: location(c"u_fringe"),
+            embolden: location(c"u_embolden"),
+            transform: location(c"u_transform"),
+            pixel_scale: location(c"u_pixel_scale"),
+            tint: location(c"u_tint"),
+        }
+    }
+}
+
 #[derive(Clone, Serialize)]
 pub struct GraphicsInfo {
     pub vendor: String,
@@ -326,6 +355,9 @@ pub struct Renderer {
     program: GLuint,
     vector_program: GLuint,
     text_program: GLuint,
+    uniforms: Uniforms,
+    vector_uniforms: Uniforms,
+    text_uniforms: Uniforms,
     text_embolden: f32,
     buffer: GLuint,
     vao: GLuint,
@@ -380,17 +412,14 @@ impl Renderer {
         let fragment_highp = !gles || precision > 0;
         let qualifier = if fragment_highp { "highp" } else { "mediump" };
         let vertex_prefix = if gles {
-            format!("#version 100\nprecision highp float;\n#define PAINT_PRECISION {qualifier}\n")
+            include_str!("shaders/gles.vert.glsl").replace("LUMA_PRECISION", qualifier)
         } else {
-            "#version 150\n#define attribute in\n#define varying out\n#define PAINT_PRECISION\n"
-                .into()
+            include_str!("shaders/desktop.vert.glsl").into()
         };
         let fragment_prefix = if gles {
-            format!(
-                "#version 100\nprecision {qualifier} float;\n#define PAINT_PRECISION {qualifier}\n"
-            )
+            include_str!("shaders/gles.frag.glsl").replace("LUMA_PRECISION", qualifier)
         } else {
-            "#version 150\n#define varying in\n#define texture2D texture\nout vec4 out_color;\n#define gl_FragColor out_color\n#define PAINT_PRECISION\n".into()
+            include_str!("shaders/desktop.frag.glsl").into()
         };
         let program = link(
             &(vertex_prefix.clone() + include_str!("shaders/paint.vert")),
@@ -447,6 +476,9 @@ impl Renderer {
             program,
             vector_program,
             text_program,
+            uniforms: Uniforms::new(program),
+            vector_uniforms: Uniforms::new(vector_program),
+            text_uniforms: Uniforms::new(text_program),
             text_embolden,
             buffer,
             vao,
@@ -519,8 +551,8 @@ impl Renderer {
     fn trim_text_geometry(&mut self) {
         let glyph_bytes =
             |glyph: &Glyph| glyph.geometry.len() * size_of::<luma_vector_geometry::Vertex>();
-        let mut bytes: usize = self.glyphs.values().map(glyph_bytes).sum();
-        if bytes > GLYPH_GEOMETRY_BUDGET || self.glyphs.len() > 4096 {
+        let mut glyph_total: usize = self.glyphs.values().map(glyph_bytes).sum();
+        if glyph_total > GLYPH_GEOMETRY_BUDGET || self.glyphs.len() > 4096 {
             let mut old: Vec<_> = self
                 .glyphs
                 .iter()
@@ -529,11 +561,11 @@ impl Renderer {
                 .collect();
             old.sort_by_key(|(_, frame)| *frame);
             for (key, _) in old {
-                if bytes <= GLYPH_GEOMETRY_BUDGET && self.glyphs.len() <= 4096 {
+                if glyph_total <= GLYPH_GEOMETRY_BUDGET && self.glyphs.len() <= 4096 {
                     break;
                 }
                 if let Some(glyph) = self.glyphs.remove(&key) {
-                    bytes -= glyph_bytes(&glyph);
+                    glyph_total -= glyph_bytes(&glyph);
                 }
             }
         }
@@ -557,9 +589,9 @@ impl Renderer {
             }
         }
         self.stats.cached_glyphs = self.glyphs.len();
-        self.stats.glyph_geometry_bytes = self.glyphs.values().map(glyph_bytes).sum();
+        self.stats.glyph_geometry_bytes = glyph_total;
         self.stats.cached_text_runs = self.text_runs.len();
-        self.stats.text_geometry_bytes = self.text_runs.values().map(run_bytes).sum();
+        self.stats.text_geometry_bytes = bytes;
     }
 
     fn quad(
@@ -866,7 +898,7 @@ impl Renderer {
             }
             match self.glyph(c, selected) {
                 Ok(geometry) => {
-                    for triangle in geometry.chunks_exact(3) {
+                    for triangle in geometry.as_chunks::<3>().0 {
                         // True sample coverage needs only the original fill.
                         // Exclude the boundary fringe, not just its alpha.
                         if multisampled && triangle.iter().any(|vertex| vertex.coverage < 1.) {
@@ -1294,14 +1326,8 @@ impl Renderer {
             );
             gl::UseProgram(self.program);
             // One drawable pixel in logical units: the paint shader's edge filter width.
-            gl::Uniform1f(
-                gl::GetUniformLocation(self.program, c"u_aa".as_ptr()),
-                1. / scale.max(0.01),
-            );
-            gl::Uniform1i(
-                gl::GetUniformLocation(self.program, c"u_texture".as_ptr()),
-                0,
-            );
+            gl::Uniform1f(self.uniforms.aa, 1. / scale.max(0.01));
+            gl::Uniform1i(self.uniforms.texture, 0);
             gl::ActiveTexture(gl::TEXTURE0);
             let mut paint_bound = false;
             let mut current_fade = None;
@@ -1310,22 +1336,14 @@ impl Renderer {
                     // The same cheap alpha mask applies to shapes, textures,
                     // icons and text; the unmasked wallpaper remains beneath.
                     let fade = batch.fade.unwrap_or([0.; 8]);
-                    for program in [self.program, self.vector_program, self.text_program] {
+                    for (program, uniforms) in [
+                        (self.program, &self.uniforms),
+                        (self.vector_program, &self.vector_uniforms),
+                        (self.text_program, &self.text_uniforms),
+                    ] {
                         gl::UseProgram(program);
-                        gl::Uniform4f(
-                            gl::GetUniformLocation(program, c"u_edge_fade".as_ptr()),
-                            fade[0],
-                            fade[1],
-                            fade[2],
-                            fade[3],
-                        );
-                        gl::Uniform4f(
-                            gl::GetUniformLocation(program, c"u_edge_fade_x".as_ptr()),
-                            fade[4],
-                            fade[5],
-                            fade[6],
-                            fade[7],
-                        );
+                        gl::Uniform4f(uniforms.edge_fade, fade[0], fade[1], fade[2], fade[3]);
+                        gl::Uniform4f(uniforms.edge_fade_x, fade[4], fade[5], fade[6], fade[7]);
                     }
                     current_fade = Some(batch.fade);
                     paint_bound = false;
@@ -1445,21 +1463,23 @@ impl Renderer {
         embolden: f32,
     ) {
         let viewport = self.stats.viewport;
+        let uniforms = if program == self.text_program {
+            &self.text_uniforms
+        } else {
+            &self.vector_uniforms
+        };
         unsafe {
             gl::UseProgram(program);
             if program == self.text_program {
                 gl::Uniform1f(
-                    gl::GetUniformLocation(program, c"u_fringe".as_ptr()),
+                    uniforms.fringe,
                     if self.stats.multisample_samples > 1 {
                         0.
                     } else {
                         0.5
                     },
                 );
-                gl::Uniform1f(
-                    gl::GetUniformLocation(program, c"u_embolden".as_ptr()),
-                    embolden,
-                );
+                gl::Uniform1f(uniforms.embolden, embolden);
             }
             gl::BindBuffer(gl::ARRAY_BUFFER, mesh.buffer);
             gl::DisableVertexAttribArray(4);
@@ -1477,24 +1497,18 @@ impl Renderer {
                 offset += size as usize;
             }
             gl::Uniform4f(
-                gl::GetUniformLocation(program, c"u_transform".as_ptr()),
+                uniforms.transform,
                 transform[0],
                 transform[1],
                 transform[2],
                 transform[3],
             );
             gl::Uniform2f(
-                gl::GetUniformLocation(program, c"u_pixel_scale".as_ptr()),
+                uniforms.pixel_scale,
                 viewport.width as f32 / 1920.,
                 viewport.height as f32 / 1080.,
             );
-            gl::Uniform4f(
-                gl::GetUniformLocation(program, c"u_tint".as_ptr()),
-                tint[0],
-                tint[1],
-                tint[2],
-                tint[3],
-            );
+            gl::Uniform4f(uniforms.tint, tint[0], tint[1], tint[2], tint[3]);
             gl::DrawArrays(gl::TRIANGLES, 0, mesh.vertices);
         }
     }
@@ -1576,7 +1590,12 @@ impl Renderer {
         width: u32,
         height: u32,
         save: Option<&Path>,
-    ) -> (usize, u8) {
+    ) -> Result<(usize, u8), String> {
+        damage_verification_support(
+            &self.info.version,
+            gl::RenderbufferStorageMultisample::is_loaded(),
+            gl::BlitFramebuffer::is_loaded(),
+        )?;
         let (w, h) = (width as i32, height as i32);
         let length = width as usize * height as usize * 4;
         let mut window = vec![0u8; length];
@@ -1614,6 +1633,12 @@ impl Renderer {
                     gl::RENDERBUFFER,
                     renderbuffer,
                 );
+                if gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
+                    gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+                    gl::DeleteFramebuffers(2, framebuffers.as_ptr());
+                    gl::DeleteRenderbuffers(2, renderbuffers.as_ptr());
+                    return Err("Damage verification framebuffer is incomplete".into());
+                }
             }
             gl::BindFramebuffer(gl::FRAMEBUFFER, framebuffers[0]);
         }
@@ -1639,7 +1664,12 @@ impl Renderer {
         self.stats = stats;
         let mut differing = 0;
         let mut largest = 0;
-        for (a, b) in window.chunks_exact(4).zip(full.chunks_exact(4)) {
+        for (a, b) in window
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(full.as_chunks::<4>().0)
+        {
             let difference = (0..3).map(|i| a[i].abs_diff(b[i])).max().unwrap_or(0);
             largest = largest.max(difference);
             differing += usize::from(difference > 16);
@@ -1652,8 +1682,21 @@ impl Renderer {
                 }
             }
         }
-        (differing, largest)
+        Ok((differing, largest))
     }
+}
+
+fn damage_verification_support(
+    version: &str,
+    multisample_loaded: bool,
+    blit_loaded: bool,
+) -> Result<(), String> {
+    if version.starts_with("OpenGL ES 2.") || !multisample_loaded || !blit_loaded {
+        return Err(
+            "Damage verification requires OpenGL 3 or OpenGL ES 3 framebuffer support".into(),
+        );
+    }
+    Ok(())
 }
 
 // Noto Sans SC (font-cjk) has no Hangul syllables; these go to font-kr instead.
@@ -1807,5 +1850,18 @@ fn link(vertex: &str, fragment: &str, attributes: &[&CStr]) -> Result<GLuint, St
             ));
         }
         Ok(program)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn damage_verification_rejects_unsupported_contexts_and_missing_entry_points() {
+        use super::damage_verification_support;
+        assert!(damage_verification_support("OpenGL ES 2.0", true, true).is_err());
+        assert!(damage_verification_support("3.2 Core", false, true).is_err());
+        assert!(damage_verification_support("3.2 Core", true, false).is_err());
+        assert!(damage_verification_support("3.2 Core", true, true).is_ok());
+        assert!(damage_verification_support("OpenGL ES 3.0", true, true).is_ok());
     }
 }

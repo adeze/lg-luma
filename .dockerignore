@@ -1,0 +1,5 @@
+*
+!docker/
+!docker/Dockerfile.checks
+!tools/
+!tools/verify-webos.mjs

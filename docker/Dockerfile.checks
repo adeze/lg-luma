@@ -1,0 +1,10 @@
+FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4
+
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends binutils \
+    && rm -rf /var/lib/apt/lists/*
+COPY tools/verify-webos.mjs /check/verify-webos.mjs
+USER 65534:65534
+ENTRYPOINT ["bun", "/check/verify-webos.mjs"]
+CMD ["/artifacts/luma", "/usr/bin/readelf"]

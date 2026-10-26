@@ -7,31 +7,31 @@ Luma is a native Rust/SDL2/OpenGL ES 2 launcher for rooted LG webOS TVs. Rust so
 the host SVG compiler in `tools/vector-assets/`, packaging/tooling in `tools/`, and desktop smoke
 scripts in `tests/`. There is no React/JSX/browser application. Read `development.md` for details.
 
-Use pnpm, Oxlint and Oxfmt for build tools; Cargo/rustfmt/Clippy for Rust. `nix develop` supplies
-pinned Rust 1.93, ARMv7 std, Node 24, pnpm 10.34.5, SDL2, woff2 and Python/fontTools. The webOS
-SDK is separate: `pnpm sdk`, then set `WEBOS_NDK` to `.build/toolchain/arm-webos-linux-gnueabi_sdk-buildroot`.
+Use Bun, Oxlint and Oxfmt for build tools; Cargo/rustfmt/Clippy for Rust. `nix develop` supplies
+pinned Rust 1.99.1, ARMv7 std, Bun 1.4.4, SDL2, glslang, woff2 and Python/fontTools. The webOS
+SDK is separate: `bun run sdk`, then set `WEBOS_NDK` to `.build/toolchain/arm-webos-linux-gnueabi_sdk-buildroot`.
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm format:check
-pnpm check
-pnpm test
-pnpm assets
-pnpm test:smoke
-pnpm run package
+bun install --frozen-lockfile
+bun run format:check
+bun run check
+bun run test
+bun run assets
+bun run test:smoke
+bun run package
 ```
 
 When only Markdown (`.md`) files are updated, do not run checks, including formatting, lint,
 builds or tests.
 
-`pnpm check` does not execute tests. `pnpm test` is workspace unit tests; smoke scripts render
-desktop OpenGL and mock weather HTTP. Linux can use `xvfb-run -a pnpm test:smoke`. Tests must not
+`bun run check` does not execute tests. `bun run test` is workspace unit tests; smoke scripts render
+desktop OpenGL and mock weather HTTP. Linux can use `xvfb-run -a bun run test:smoke`. Tests must not
 contact real weather APIs or a TV. Respect any user instruction to use manual TV verification
 instead of running automated tests. Builds/lint may still be run. Do not claim hardware behavior
-from desktop checks. Add a `pnpm changeset` file for release-worthy changes and leave version
-bumps to the automated Version Packages PR. Its `pnpm version:release` command synchronizes
+from desktop checks. Add a `bun run changeset` file for release-worthy changes and leave version
+bumps to the automated Version Packages PR. Its `bun run version:release` command synchronizes
 `package.json`, `appinfo.json`, the root `Cargo.toml`, the `luma` entry in `Cargo.lock` and README
-IPK examples. Supporting Rust crates retain independent versions. `pnpm version:check` checks
+IPK examples. Supporting Rust crates retain independent versions. `bun run version:check` checks
 consistency without writing files. Code or behavior changes should use semantic versioning:
 patch for backward-compatible fixes, minor for backward-compatible features, and major for
 breaking changes. Translation updates and additional UI languages, including required font glyph
@@ -84,8 +84,8 @@ Desktop previews use curated vectors and generic/category fallbacks. Do not add 
 or per-TV icon maps to the repository.
 Do not replace vector logos with PNG exports.
 Curated vectors use the exact app-ID allowlist in `src/branding.rs`, never title/substring matching.
-Every logo in `assets/logos/` must have a desktop demo app. `pnpm test:brands` renders the full
-gallery to `.build/brands-gallery.png`; source restoration via `pnpm assets:brands` is optional.
+Every logo in `assets/logos/` must have a desktop demo app. `bun run test:brands` renders the full
+gallery to `.build/brands-gallery.png`; source restoration via `bun run assets:brands` is optional.
 
 ## CI and releases
 

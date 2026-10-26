@@ -12,7 +12,7 @@
     "dist/**",
     ".build/**",
     "target/**",
-    "pnpm-lock.yaml",
+    "bun.lock",
     "assets/fonts/**",
     "assets/licenses/**",
     "assets/ui-icons/**"

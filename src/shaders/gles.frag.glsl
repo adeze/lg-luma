@@ -1,0 +1,3 @@
+#version 100
+precision LUMA_PRECISION float;
+#define PAINT_PRECISION LUMA_PRECISION

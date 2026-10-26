@@ -26,30 +26,30 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           allow-unsafe-pr-checkout: true
           persist-credentials: false
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '24'
+          bun-version: '1.4.4'
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - uses: dtolnay/rust-toolchain@1.93.0
+        run: bun install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: '1.99.1'
           targets: armv7-unknown-linux-gnueabi
       - name: Install asset dependencies
         run: |
           apt_options=(-o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
           sudo apt-get "${apt_options[@]}" update
           sudo apt-get "${apt_options[@]}" install -y --no-install-recommends \
-            libsdl2-dev pkg-config woff2 python3-fonttools
+            libsdl2-dev pkg-config glslang-tools woff2 python3-fonttools
       - name: Generate native assets
-        run: pnpm assets
+        run: bun run assets
       - name: Set up the webOS SDK
-        run: pnpm sdk
+        run: bun run sdk
       - name: Cross-build and verify the test IPK
         run: |
           export WEBOS_NDK="$GITHUB_WORKSPACE/.build/toolchain/arm-webos-linux-gnueabi_sdk-buildroot"
-          pnpm build
-          node tools/package.mjs
+          bun run build
+          bun tools/package.mjs
       - name: Upload test IPK and checksum
         uses: actions/upload-artifact@v7
         with:

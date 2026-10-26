@@ -29,35 +29,46 @@
           )
         );
       project = builtins.fromJSON (builtins.readFile ./package.json);
-      pnpmVersion = nixpkgs.lib.removePrefix "pnpm@" project.packageManager;
+      bunVersion = nixpkgs.lib.removePrefix "bun@" project.packageManager;
     in
     {
       devShells = forEachSystem (
         pkgs:
         let
           # Match the native CI toolchain and include the TV's soft-float Rust std.
-          rust = pkgs.rust-bin.stable."1.93.0".minimal.override {
-            extensions = [
-              "clippy"
-              "rustfmt"
-            ];
-            targets = [ "armv7-unknown-linux-gnueabi" ];
-          };
-          pnpm =
-            assert pkgs.lib.assertMsg (
-              pkgs.pnpm_10.version == pnpmVersion
-            ) "The flake's pnpm must match package.json; update flake.lock and packageManager together.";
-            pkgs.pnpm_10;
+          rust = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
+          # Keep the runtime aligned with CI without moving the entire nixpkgs pin.
+          bunSource = {
+            aarch64-darwin = {
+              archive = "bun-darwin-aarch64.zip";
+              sha256 = "c240d7f0ccb90c263a849fcdb09b7ee62630d921348ed6aafda86b9d577bc510";
+            };
+            aarch64-linux = {
+              archive = "bun-linux-aarch64.zip";
+              sha256 = "baa6bb36f51d6e58561e02bbea825038a9df454f673d6d776e8bbf86f8c7850e";
+            };
+            x86_64-linux = {
+              archive = "bun-linux-x64-baseline.zip";
+              sha256 = "e0446eb55995772eb9894bebae9a6be368d985a8b9271ee124486f9946eedd76";
+            };
+          }.${pkgs.stdenv.hostPlatform.system};
+          bun = pkgs.bun.overrideAttrs (_: {
+            version = bunVersion;
+            src = pkgs.fetchurl {
+              url = "https://github.com/oven-sh/bun/releases/download/bun-v${bunVersion}/${bunSource.archive}";
+              inherit (bunSource) sha256;
+            };
+          });
         in
         {
           default = pkgs.mkShell ({
             name = "luma";
             packages = [
-              pkgs.nodejs_24
-              pnpm
+              bun
               rust
               pkgs.pkg-config
               pkgs.SDL2
+              pkgs.glslang
               pkgs.woff2
               (pkgs.python3.withPackages (python: [ python.fonttools ]))
               pkgs.cmake

@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { override } from './vm.mjs';
 
 const script = await fs.readFile(new URL('../tv/home.cjs', import.meta.url), 'utf8');
 const exe = '/usr/bin/com.webos.app.home';
@@ -37,7 +38,7 @@ function tv({ root = null, same = false, front = ['com.webos.app.home'] } = {}) 
   const context = load();
   const calls = [];
   const state = { root, same, fronts: [...front], marker: false };
-  Object.assign(context, {
+  override(context, {
     fs: {
       existsSync: (file) => file === `${appDir}/luma` || (file === marker && state.marker),
       writeFileSync(file, data) {

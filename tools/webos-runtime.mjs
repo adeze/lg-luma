@@ -11,8 +11,10 @@ const release = 'release-2.30.12-webos.5';
 const filename = 'SDL2-2.30.12-webos.tar.gz';
 const archiveHash = '4ad566453d113bdd9ee96878176b97d28d9fa70503a62d83d55a351545abb334';
 const libraryHash = 'f564f7da624cec47168300d017f3ec822f41b5096f0ce1c96873eecd8614d446';
+/** @param {Uint8Array} bytes */
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
+/** @param {Buffer} bytes */
 export function verifyWebosSdl(bytes) {
   if (
     bytes.length < 52 ||
@@ -41,7 +43,7 @@ export async function prepareWebosRuntime() {
   try {
     bytes = await fs.readFile(archive);
   } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
     console.log(`Downloading SDL-webOS ${release} (standard SDL ABI).`);
     const url = `https://github.com/webosbrew/SDL-webOS/releases/download/${release}/${filename}`;
     const response = await fetch(url, { signal: AbortSignal.timeout(60000) });
@@ -57,7 +59,7 @@ export async function prepareWebosRuntime() {
   try {
     current = await fs.readFile(library);
   } catch (error) {
-    if (error.code !== 'ENOENT') throw error;
+    if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
   }
   if (!current || hash(current) !== libraryHash) {
     const result = spawnSync('tar', ['-xzf', archive, '-C', directory], {

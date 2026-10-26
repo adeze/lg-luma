@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import test from 'node:test';
 import vm from 'node:vm';
+import { override } from './vm.mjs';
 
 const script = await fs.readFile(new URL('../tv/home.cjs', import.meta.url), 'utf8');
 const app = 'com.ecklf.luma';
@@ -117,7 +118,7 @@ test('apply refreshes the staged image even while the Home mount is active', () 
   const mock = fixture({ mounted: true, preferences: { [developer]: { background: 'prism' } } });
   mock.files.set(`${stage}/splash.png`, Buffer.from('old background'));
   const calls = [];
-  Object.assign(mock.context, {
+  override(mock.context, {
     foreignMount: () => false,
     foreground: () => 'some.other.app',
     reread: () => calls.push('reread'),
@@ -135,7 +136,7 @@ function closeFixture({ running, closeReply = { returnValue: true } }) {
   const calls = [];
   let queries = 0;
   let pauses = 0;
-  Object.assign(mock.context, {
+  override(mock.context, {
     luna(method, payload) {
       calls.push([method, { ...payload }]);
       if (method === 'running') {

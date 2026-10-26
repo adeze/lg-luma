@@ -34,7 +34,7 @@ impl Assets {
     pub fn load(root: PathBuf, webos: bool) -> Result<Self, String> {
         let load = |file: &str| {
             std::fs::read(root.join(file))
-                .map_err(|e| format!("Native assets are missing: {e}. Run pnpm assets."))
+                .map_err(|e| format!("Native assets are missing: {e}. Run bun run assets."))
         };
         let version = String::from_utf8(load("version.txt")?).map_err(|e| e.to_string())?;
         let metrics =

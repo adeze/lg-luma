@@ -1,9 +1,10 @@
 //! A Luna subscription held by a child process (on the TV, a root `luna-send -a …`), for calls
 //! Luma's own LS2 connection may not make. Free of LS2, so the host tests can exercise it.
 use serde_json::Value;
+#[cfg(target_os = "linux")]
+use std::os::unix::process::CommandExt;
 use std::{
-    io::{BufRead, BufReader},
-    os::unix::process::CommandExt,
+    io::{BufRead, BufReader, Read},
     panic::{AssertUnwindSafe, catch_unwind},
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex, mpsc},
@@ -64,12 +65,14 @@ pub fn subscribe(
     spawn: Spawner,
 ) -> Result<AppSubscription, String> {
     command
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
     // SAFETY: getpid has no preconditions.
+    #[cfg(target_os = "linux")]
     let parent = unsafe { libc::getpid() };
     // SAFETY: prctl, getppid and _exit are async-signal-safe and only affect the forked child.
+    #[cfg(target_os = "linux")]
     unsafe {
         command.pre_exec(move || {
             if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
@@ -116,9 +119,21 @@ pub fn subscribe(
             let mut answered = Some(answered);
             let mut registered = false;
             // One compact JSON reply per line. Skip anything else, including invalid UTF-8.
-            for line in BufReader::new(stdout).split(b'\n').map_while(Result::ok) {
+            let mut output = BufReader::new(stdout);
+            let mut line = Vec::new();
+            loop {
+                line.clear();
+                match output
+                    .by_ref()
+                    .take(MAX_REPLY as u64 + 1)
+                    .read_until(b'\n', &mut line)
+                {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
                 if line.len() > MAX_REPLY {
-                    continue;
+                    eprintln!("Luna app subscription: reply exceeds size limit");
+                    break;
                 }
                 let Ok(value) = serde_json::from_slice::<Value>(&line) else {
                     continue;

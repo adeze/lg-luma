@@ -79,12 +79,7 @@ test('the real release command combines changesets and synchronizes every file',
   await syncVersions(directory);
   await fs.mkdir(path.join(directory, 'tools'));
   await fs.mkdir(path.join(directory, '.changeset'));
-  for (const filename of [
-    'tools/sync-version.mjs',
-    '.changeset/config.json',
-    'pnpm-workspace.yaml',
-    '.oxfmtrc.json',
-  ]) {
+  for (const filename of ['tools/sync-version.mjs', '.changeset/config.json', '.oxfmtrc.json']) {
     await fs.copyFile(path.join(root, filename), path.join(directory, filename));
   }
   await fs.symlink(path.join(root, 'node_modules'), path.join(directory, 'node_modules'), 'dir');
@@ -96,7 +91,7 @@ test('the real release command combines changesets and synchronizes every file',
     path.join(directory, '.changeset/feature.md'),
     '---\n"lg-luma": minor\n---\n\nAdd a release feature.\n',
   );
-  const result = spawnSync('pnpm', ['version:release'], {
+  const result = spawnSync('bun', ['run', 'version:release'], {
     cwd: directory,
     encoding: 'utf8',
     timeout: 30000,

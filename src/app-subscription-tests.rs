@@ -144,6 +144,41 @@ fn a_child_that_exits_first_ends_unregistered() {
 }
 
 #[test]
+fn stdin_stays_open_until_the_subscription_ends() {
+    let script = r#"echo '{"returnValue":true,"message":"registered"}'
+read -r line
+touch "$DIR/stdin-closed"
+exec sleep 30"#;
+    let (fake, subscription) = Fake::start(script, Duration::from_secs(5), spawn_thread);
+    let subscription = subscription.unwrap();
+    assert_eq!(
+        fake.messages.recv_timeout(Duration::from_secs(5)).unwrap()["message"],
+        "registered"
+    );
+    assert!(!appears(
+        &fake.file("stdin-closed"),
+        Duration::from_millis(200)
+    ));
+    subscription.end();
+    assert_eq!(fake.end(), Some(true));
+}
+
+#[test]
+fn oversized_replies_end_the_child_with_or_without_a_newline() {
+    for ending in ["", "echo"] {
+        let script = format!(
+            "echo '{{\"returnValue\":true,\"message\":\"registered\"}}'\nhead -c {} /dev/zero | tr '\\000' x\n{ending}\nexec sleep 30",
+            super::MAX_REPLY + 1
+        );
+        let (fake, subscription) = Fake::start(&script, Duration::from_secs(5), spawn_thread);
+        let subscription = subscription.unwrap();
+        assert_eq!(fake.end(), Some(true));
+        assert_eq!(fake.messages(), ["registered"]);
+        subscription.end();
+    }
+}
+
+#[test]
 fn a_registration_lost_later_ends_registered() {
     let script = format!(
         r#"echo '{{"returnValue":true,"message":"registered"}}'

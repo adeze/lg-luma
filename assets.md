@@ -54,7 +54,7 @@ sources. Original sources remain in `assets/`; no artwork service is contacted o
 ### Expanded streaming and music artwork
 
 `tools/brand-assets.mjs` records each upstream URL and SHA-256. The SVGs are checked in, so
-ordinary builds and TV rendering remain offline. `pnpm assets:brands` is an optional source
+ordinary builds and TV rendering remain offline. `bun run assets:brands` is an optional source
 restoration command. The mesh compiler tightly fits these logos and applies white/dark-card ink
 treatments while retaining selected brand colours. Peacock and Watcha have redundant rectangular
 clips removed. Coupang Play's static SVG paths are extracted from its source component.

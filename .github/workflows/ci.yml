@@ -42,15 +42,14 @@ jobs:
       tag: ${{ steps.package.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '24'
-          cache: pnpm
+          bun-version: '1.4.4'
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - uses: dtolnay/rust-toolchain@1.93.0
+        run: bun install --frozen-lockfile
+      - uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: '1.99.1'
           components: rustfmt, clippy
           targets: armv7-unknown-linux-gnueabi
       - name: Cache Rust dependencies
@@ -63,28 +62,30 @@ jobs:
           sudo apt-get "${apt_options[@]}" update
           # FontTools recommends large optional scientific Python packages. xauth is needed by xvfb-run.
           sudo apt-get "${apt_options[@]}" install -y --no-install-recommends \
-            libsdl2-dev pkg-config woff2 python3-fonttools libgl1-mesa-dri xvfb xauth
+            libsdl2-dev pkg-config glslang-tools woff2 python3-fonttools libgl1-mesa-dri xvfb xauth
       - name: Check formatting
-        run: pnpm format:check
+        run: bun run format:check
       - name: Lint Rust and packaging tools
-        run: pnpm check
+        run: bun run check
       - name: Run unit tests
-        run: pnpm test
+        run: bun run test
       - name: Generate native assets
-        run: pnpm assets
+        run: bun run assets
       - name: Exercise desktop rendering and mocked weather
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
-        run: xvfb-run -a -s '-screen 0 1920x1080x24' pnpm test:smoke
+        run: xvfb-run -a -s '-screen 0 1920x1080x24' bun run test:smoke
       - name: Set up the webOS SDK
-        run: pnpm sdk
+        run: bun run sdk
       - name: Cross-build and verify the native IPK and Homebrew feed
         id: package
         run: |
           export WEBOS_NDK="$GITHUB_WORKSPACE/.build/toolchain/arm-webos-linux-gnueabi_sdk-buildroot"
-          pnpm build
-          node tools/package.mjs
-          node tools/repository.mjs
+          bun run build
+          bun tools/package.mjs
+          bun tools/repository.mjs
+      - name: Inspect the ARM executable in an isolated container
+        run: bun run check:binary:container
       - name: Upload release files
         uses: actions/upload-artifact@v7
         with:

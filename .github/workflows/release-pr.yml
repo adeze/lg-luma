@@ -22,18 +22,16 @@ jobs:
       actions: write
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v7
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: '24'
-          cache: pnpm
+          bun-version: '1.4.4'
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: bun install --frozen-lockfile
       - name: Create or update the version PR
         id: changesets
         uses: changesets/action@v2
         with:
-          version-script: pnpm version:release
+          version-script: bun run version:release
           pr-title: Version Packages
           commit-message: Version Packages
           create-github-releases: false
