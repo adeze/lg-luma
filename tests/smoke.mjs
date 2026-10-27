@@ -38,6 +38,7 @@ try {
     ]);
     const state = JSON.parse(await fs.readFile(dump, 'utf8'));
     const render = JSON.parse(await fs.readFile(diagnostics, 'utf8'));
+    assert.equal(render.window_hidden, true, 'Automated captures must not open a desktop window');
     assert.equal(
       render.capture.glyph_failures,
       0,
@@ -327,18 +328,11 @@ try {
     preferences,
     JSON.stringify({ favorites: edgeFavorites, show_weather: false }),
   );
-  const edgeRight = await scenario('favorites-edge-right', 'home,click:1860:600');
-  assert.deepEqual(edgeRight.focus, { App: edgeFavorites[6] });
-  assert.equal(edgeRight.home_scroll, 0, 'Clicking the fragment must not move it');
-  const edgeLeft = await scenario(
-    'favorites-edge-left',
-    `home,down,${Array(6).fill('right').join(',')},click:40:600`,
-  );
-  assert.deepEqual(edgeLeft.focus, { App: edgeFavorites[0] });
-  assert.ok(
-    Math.abs(edgeLeft.home_scroll - 281.6) < 0.01,
-    'Pointer focus preserves strip position',
-  );
+  const secondRow = await scenario('favorites-second-row', 'home,click:120:680');
+  assert.deepEqual(secondRow.focus, { App: edgeFavorites[6] });
+  assert.equal(secondRow.scroll, 0, 'Clicking a favorite must not move it');
+  const remoteRow = await scenario('favorites-remote-row', 'home,down,down');
+  assert.deepEqual(remoteRow.focus, { App: edgeFavorites[6] });
   console.log(
     'Native smoke checks passed: rendering/alpha, navigation, persistence, SDL pointer input, DPI-aware glyphs, 4K capture and presentation profiling.',
   );

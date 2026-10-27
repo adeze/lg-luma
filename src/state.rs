@@ -16,14 +16,9 @@ pub const APPS_COLUMNS: usize = 6;
 /// Automatic inventory retries before the error shows: with the 6.5 s Luna timeout about 50 s.
 pub const INVENTORY_RETRIES: u32 = 5;
 pub const INVENTORY_RETRY_DELAY: Duration = Duration::from_secs(2);
-pub const HOME_STRIP_LEFT: f32 = 84.;
-// Six favourites in full and the seventh cut off and fading out at the right (Apple TV rows):
-// the strip ends after the sixth tile, so a focused tile never sits in the fade.
-pub const HOME_STRIP_RIGHT: f32 = 1748.;
+pub const HOME_COLUMNS: usize = 6;
 pub const HOME_TILE_WIDTH: f32 = 256.;
 pub const HOME_TILE_PITCH: f32 = 281.6;
-pub const HOME_FADE_LEFT: f32 = 8.;
-pub const HOME_FADE_RIGHT: f32 = 1910.;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize)]
 pub enum Page {
@@ -173,7 +168,6 @@ pub struct State {
     pub section: usize,
     pub subpage: Option<Subpage>,
     pub scroll: f32,
-    pub home_scroll: f32,
     pub overlay: Option<Overlay>,
     pub moving: Option<String>,
     pub loading: bool,
@@ -208,7 +202,6 @@ impl State {
             section: 0,
             subpage: None,
             scroll: 0.,
-            home_scroll: 0.,
             overlay: None,
             moving: None,
             loading: false,
@@ -307,9 +300,6 @@ impl State {
         };
         self.focus = Target::Nav(self.page_index());
         self.scroll = 0.;
-        if self.page == Page::Home {
-            self.scroll_favorites(0.);
-        }
         self.query.clear();
         self.filter = 0;
         self.overlay = None;
@@ -362,13 +352,7 @@ impl State {
     }
 
     pub fn favorites_viewport(&self) -> Rect {
-        let content = self.content_viewport();
-        let left = if self.home_scroll > 0. {
-            HOME_FADE_LEFT
-        } else {
-            0.
-        };
-        Rect::new(left, content.y, HOME_FADE_RIGHT - left, content.h)
+        self.content_viewport()
     }
 
     pub fn hit_test(&self, controls: &[Control], x: f32, y: f32) -> Option<Target> {
@@ -392,7 +376,7 @@ impl State {
         &mut self,
         controls: &[Control],
         position: Option<(f32, f32)>,
-        x: i32,
+        _x: i32,
         y: i32,
     ) -> bool {
         let over_favorites = self.page == Page::Home
@@ -402,44 +386,16 @@ impl State {
                         matches!(control.target, Target::App(_)) && control.rect.contains(x, y)
                     })
             });
-        let favorites = self.page == Page::Home && (x != 0 || over_favorites);
-        if favorites {
-            self.scroll_favorites((if x != 0 { x } else { -y }) as f32 * HOME_TILE_PITCH);
-        } else {
-            let bottom = self.content_viewport().y + self.content_viewport().h - 12.;
-            let max = controls
-                .iter()
-                .filter(|c| c.scrollable)
-                .map(|c| c.rect.y + c.rect.h + self.scroll - bottom)
-                .fold(0., f32::max);
-            self.scroll = (self.scroll - y as f32 * 90.).clamp(0., max.max(0.));
-        }
+        let bottom = self.content_viewport().y + self.content_viewport().h - 12.;
+        let max = controls
+            .iter()
+            .filter(|c| c.scrollable)
+            .map(|c| c.rect.y + c.rect.h + self.scroll - bottom)
+            .fold(0., f32::max);
+        self.scroll = (self.scroll - y as f32 * 90.).clamp(0., max.max(0.));
         self.pointer = true;
         self.dirty = true;
-        favorites
-    }
-
-    pub fn scroll_favorites(&mut self, delta: f32) {
-        let count = self
-            .preferences
-            .favorites(&self.inventory.apps)
-            .iter()
-            .filter(|id| {
-                !self.preferences.hidden.contains(id)
-                    && self.inventory.apps.iter().any(|app| &app.id == *id)
-            })
-            .count();
-        let content = if count == 0 {
-            0.
-        } else {
-            (count - 1) as f32 * HOME_TILE_PITCH + HOME_TILE_WIDTH
-        };
-        let max = (content - (HOME_STRIP_RIGHT - HOME_STRIP_LEFT)).max(0.);
-        let next = (self.home_scroll + delta).clamp(0., max);
-        if next != self.home_scroll {
-            self.home_scroll = next;
-            self.dirty = true;
-        }
+        over_favorites
     }
 
     pub fn set_inventory(&mut self, next: Inventory, warning: Option<String>) {
@@ -473,9 +429,6 @@ impl State {
     }
 
     pub fn reconcile_focus(&mut self) {
-        if self.page == Page::Home {
-            self.scroll_favorites(0.);
-        }
         if let Target::App(id) = &self.focus
             && !self.apps().iter().any(|app| &app.id == id)
         {
@@ -496,7 +449,7 @@ impl State {
         match self.page {
             Page::Home => self
                 .apps()
-                .get(((self.home_scroll - 0.01).max(0.) / HOME_TILE_PITCH).ceil() as usize)
+                .first()
                 .map(|app| Target::App(app.id.clone()))
                 .unwrap_or(if self.error.is_some() {
                     Target::Retry
@@ -530,15 +483,7 @@ impl State {
     /// Pointer paths deliberately do not call this method.
     pub fn reveal_focus(&mut self, controls: &[Control]) -> bool {
         let previous = self.scroll;
-        let previous_home = self.home_scroll;
         if let Some(control) = controls.iter().find(|c| c.target == self.focus) {
-            if self.page == Page::Home && matches!(self.focus, Target::App(_)) {
-                if control.rect.x < HOME_STRIP_LEFT {
-                    self.home_scroll += control.rect.x - HOME_STRIP_LEFT;
-                } else if control.rect.x + control.rect.w > HOME_STRIP_RIGHT {
-                    self.home_scroll += control.rect.x + control.rect.w - HOME_STRIP_RIGHT;
-                }
-            }
             if matches!(
                 self.focus,
                 Target::Nav(_)
@@ -568,13 +513,10 @@ impl State {
                 }
             }
         }
-        if self.page == Page::Home {
-            self.scroll_favorites(0.);
-        }
-        if self.scroll != previous || self.home_scroll != previous_home {
+        if self.scroll != previous {
             self.dirty = true;
         }
-        self.scroll != previous || self.home_scroll != previous_home
+        self.scroll != previous
     }
 
     /// Hover and pointer-down must not move the control before pointer-up.
@@ -679,6 +621,10 @@ impl State {
                 let next = match direction {
                     Direction::Left => index.saturating_sub(1),
                     Direction::Right => (index + 1).min(slots.len() - 1),
+                    Direction::Up if index >= HOME_COLUMNS => index - HOME_COLUMNS,
+                    Direction::Down if (index / HOME_COLUMNS + 1) * HOME_COLUMNS < slots.len() => {
+                        (index + HOME_COLUMNS).min(slots.len() - 1)
+                    }
                     _ => index,
                 };
                 if next != index {
@@ -706,7 +652,20 @@ impl State {
                             let id = apps[next].id.clone();
                             self.focus(Target::App(id), controls);
                         }
+                        Direction::Up if index >= HOME_COLUMNS => {
+                            self.focus(Target::App(apps[index - HOME_COLUMNS].id.clone()), controls)
+                        }
                         Direction::Up => self.focus(Target::Nav(0), controls),
+                        Direction::Down
+                            if (index / HOME_COLUMNS + 1) * HOME_COLUMNS < apps.len() =>
+                        {
+                            self.focus(
+                                Target::App(
+                                    apps[(index + HOME_COLUMNS).min(apps.len() - 1)].id.clone(),
+                                ),
+                                controls,
+                            )
+                        }
                         Direction::Down => {
                             let x = controls
                                 .iter()
@@ -1037,12 +996,6 @@ impl State {
         let next = controls
             .iter()
             .filter(|candidate| candidate.target != self.focus)
-            .filter(|candidate| {
-                self.page != Page::Home
-                    || !matches!(candidate.target, Target::App(_))
-                    || (candidate.rect.x >= HOME_STRIP_LEFT - 0.1
-                        && candidate.rect.x + candidate.rect.w <= HOME_STRIP_RIGHT + 0.1)
-            })
             .filter_map(|candidate| {
                 // Header controls never steal an Up route from the active tab.
                 if self.overlay.is_none()

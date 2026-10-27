@@ -4,9 +4,8 @@ use crate::{
     model::{App, BACKGROUNDS, CATEGORIES, Input, InputMode},
     renderer::{Color, Draw, TextStyle, WHITE},
     state::{
-        APPS_COLUMNS, Control, HOME_FADE_LEFT, HOME_FADE_RIGHT, HOME_STRIP_LEFT, HOME_STRIP_RIGHT,
-        HOME_TILE_PITCH, HOME_TILE_WIDTH, KEYS, Overlay, Page, Rect, SYSTEM_SECTION, State,
-        Subpage, Target, TextField, WEATHER_SECTION,
+        APPS_COLUMNS, Control, HOME_COLUMNS, HOME_TILE_PITCH, HOME_TILE_WIDTH, KEYS, Overlay, Page,
+        Rect, SYSTEM_SECTION, State, Subpage, Target, TextField, WEATHER_SECTION,
     },
     weather::{self, Unit},
 };
@@ -233,7 +232,7 @@ impl Scene {
                         [brightness, brightness, brightness, alpha],
                     );
                 }
-                Draw::Clip(_) | Draw::EdgeFade(_) | Draw::EdgeFadeX(_) => {}
+                Draw::Clip(_) | Draw::EdgeFade(_) => {}
             }
         }
     }
@@ -817,11 +816,15 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
         .then(|| weather_summary_layout(state, assets));
     let shift = summary
         .as_ref()
-        .map_or(0., |summary| (summary.height + 18.4) / 2.);
+        .map_or(0., |summary| ((summary.height + 18.4) / 2.).min(72.));
+    let favorites_y = summary.as_ref().map_or(418.5_f32, |summary| {
+        418.5_f32.max(228. - shift + 94.92 + 18.4 + summary.height + 20.)
+    });
+    let grid_y = favorites_y + 66.3;
     let date = language.date(now);
     out.text(
         date,
-        Rect::new(84., 227.2 - shift - s, 1200., 17.),
+        Rect::new(84., 190.2 - shift - s, 1200., 17.),
         text(14.4, 600, 0.12),
         c(0xf5f5f5, 0.72),
         false,
@@ -829,17 +832,17 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
     let greeting = language.greeting(now.hour(), &state.preferences.greeting_name);
     out.text(
         &greeting,
-        Rect::new(84., 265. - shift - s, 1500., 95.),
+        Rect::new(84., 228. - shift - s, 1500., 95.),
         text(90.4, 500, -0.065).leading(1.05),
         WHITE,
         false,
     );
     if let Some(summary) = summary {
-        weather_summary(out, state, assets, summary, 265. - shift + 94.92 + 18.4 - s);
+        weather_summary(out, state, assets, summary, 228. - shift + 94.92 + 18.4 - s);
     }
     out.text(
         language.t("favorites"),
-        Rect::new(84., 478.5 - s, 1000., 31.),
+        Rect::new(84., favorites_y - s, 1000., 31.),
         text(23.2, 550, -0.035).leading(1.3),
         WHITE,
         false,
@@ -847,7 +850,7 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
     if state.moving.is_some() {
         out.text(
             language.t("moveApps"),
-            Rect::new(1686., 485. - s, 150., 24.),
+            Rect::new(1686., favorites_y + 6.5 - s, 150., 24.),
             text(14.4, 400, 0.),
             c(0xdedede, 1.),
             true,
@@ -860,9 +863,9 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
         for index in 0..6 {
             out.shape(
                 Rect::new(
-                    84. + index as f32 * GRID_PITCH,
-                    544.8 - s,
-                    270.,
+                    84. + index as f32 * HOME_TILE_PITCH,
+                    grid_y - s,
+                    HOME_TILE_WIDTH,
                     FACE_HEIGHT,
                 ),
                 19.2,
@@ -876,7 +879,7 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
             state,
             assets,
             EmptyState {
-                rect: Rect::new(84., 533.6 - s, 1752., 258.7),
+                rect: Rect::new(84., grid_y - 11.2 - s, 1752., 258.7),
                 icon: if error { "alert" } else { "heart" },
                 title: if error {
                     language.t("aLittleHelp")
@@ -904,22 +907,8 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
                 0.
             };
     }
-    // Like Apple TV's rows, the favourites run to the screen edge: the next tile shows cut off
-    // at the right (and a scrolled-away one at the left), so it is clear the row continues.
+    let row_pitch = grid_height + 24.;
     out.draw.push(Draw::Clip(Some(state.favorites_viewport())));
-    // Soft edges: out to the right from the end of the sixth tile, and in from the left once
-    // the row has scrolled.
-    let left = if state.home_scroll > 0. {
-        [HOME_FADE_LEFT, HOME_STRIP_LEFT]
-    } else {
-        [0., 0.]
-    };
-    out.draw.push(Draw::EdgeFadeX(Some([
-        left[0],
-        left[1],
-        HOME_STRIP_RIGHT,
-        HOME_FADE_RIGHT,
-    ])));
     for (index, app) in apps.iter().enumerate() {
         tile(
             out,
@@ -927,8 +916,8 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
             assets,
             app,
             Rect::new(
-                84. + index as f32 * HOME_TILE_PITCH - state.home_scroll,
-                544.8 - s,
+                84. + (index % HOME_COLUMNS) as f32 * HOME_TILE_PITCH,
+                grid_y + (index / HOME_COLUMNS) as f32 * row_pitch - s,
                 HOME_TILE_WIDTH,
                 FACE_HEIGHT,
             ),
@@ -936,9 +925,11 @@ fn home(out: &mut Scene, state: &State, assets: &Assets, now: OffsetDateTime) {
             false,
         );
     }
-    out.draw.push(Draw::EdgeFadeX(None));
     out.draw.push(Draw::Clip(Some(state.content_viewport())));
-    let input_y = 544.8 + grid_height + 41.6 - s;
+    if !apps.is_empty() {
+        grid_height += (apps.len().div_ceil(HOME_COLUMNS) - 1) as f32 * row_pitch;
+    }
+    let input_y = grid_y + grid_height + 41.6 - s;
     let inputs: Vec<_> = state
         .inventory
         .inputs

@@ -106,6 +106,11 @@ backend. Avoid copying the whole SDK library directory or the TV's graphics driv
 
 ### Documentation screenshots
 
+Desktop screenshot, state-dump and profiling runs create hidden SDL windows and use
+macOS background-app mode so automated captures do not steal keyboard focus. They
+still use a real OpenGL context; a working desktop display (or Linux Xvfb) is required.
+Interactive previews and webOS app windows retain their normal visibility.
+
 `bun run screenshots` generates `docs/home.png`, `docs/apps.png`, `docs/settings.png` and
 `docs/inputs.png`, linked by the README. It builds the desktop executable without the TV feature,
 uses isolated temporary preferences, sample inventory and a fixed date/time, and captures actual
@@ -147,10 +152,9 @@ it. Preferences are saved when the keyboard closes, including automatic system-k
 Back from either subpage restores its General row. Input name removal also uses **Clear name**.
 Choice checkmarks identify saved values, while the bright row fill identifies only the current focus.
 
-Home favorites form one horizontal strip, never a second row. Left/Right follows saved order,
-including reorder mode, and reveals complete cards. Up returns to Home navigation; Down enters
-the nearest input in the first row. The strip position survives page changes. Wheel movement over
-favorites scrolls horizontally; elsewhere it scrolls vertically. Pointer hover/down never moves
+Home favorites form a six-column grid. Left/Right follows saved order, and Up/Down moves between
+rows; the first row leads up to navigation and the last row leads down to the nearest input.
+Reorder mode follows the same grid. Wheel movement scrolls vertically. Pointer hover/down never moves
 the clicked control. Apps Up/Down follows the six-column grid order, including offscreen rows,
 and only the first row's Up route reaches the category toolbar. Scrolling Apps content fades into
 the existing wallpaper at the header/footer, with one alpha mask for surfaces, shadows, rings,
@@ -665,7 +669,7 @@ bun run dev --test-extra-apps 120
 On the TV, add `--test-extra-apps 120` after the JSON argument in the jailed command above.
 This explicitly appends up to 300 labeled non-launchable cards to a successful real inventory,
 using its apps as artwork/category templates. It uses `scroll-preview-preferences.json`,
-initialized from normal choices once. Favoriting test cards exercises long Home strips without
+initialized from normal choices once. Favoriting test cards exercises long Home grids without
 changing normal favorites. Ctrl+C then a normal launch restores real inventory/preferences.
 The placeholder cards are never a fallback for an inventory failure.
 

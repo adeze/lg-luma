@@ -38,39 +38,48 @@ fn controls(state: &State) -> Vec<crate::state::Control> {
 }
 
 #[test]
-fn favorites_edge_fragments_share_draw_hit_and_wheel_viewports() {
+fn favorites_grid_supports_pointer_remote_scrolling_and_reordering() {
     let mut state = ready();
     let favorites: Vec<_> = state
         .inventory
         .apps
         .iter()
-        .take(9)
+        .take(18)
         .map(|app| app.id.clone())
         .collect();
     state.preferences.favorites = Some(favorites.clone());
     assert_eq!(
-        state.hit_test(&controls(&state), 1860., 600.),
+        state.hit_test(&controls(&state), 120., 680.),
         Some(Target::App(favorites[6].clone()))
     );
-    assert!(state.wheel_scroll(&controls(&state), Some((1860., 600.)), 0, -1));
-    assert!((state.home_scroll - crate::state::HOME_TILE_PITCH).abs() < 0.01);
-    assert_eq!(state.scroll, 0.);
+    state.focus = Target::App(favorites[0].clone());
+    state.direction(Direction::Down, &controls(&state));
+    assert_eq!(state.focus, Target::App(favorites[6].clone()));
+    state.direction(Direction::Down, &controls(&state));
+    assert_eq!(state.focus, Target::App(favorites[12].clone()));
+    state.direction(Direction::Up, &controls(&state));
+    assert_eq!(state.focus, Target::App(favorites[6].clone()));
+    state.hold();
     assert_eq!(
-        state.hit_test(&controls(&state), 40., 600.),
-        Some(Target::App(favorites[0].clone()))
+        state.direction(Direction::Down, &controls(&state)),
+        vec![Effect::Save]
     );
-    let scroll = state.home_scroll;
+    assert_eq!(
+        state.preferences.favorites.as_ref().unwrap()[12],
+        favorites[6]
+    );
+    state.moving = None;
+    assert!(state.wheel_scroll(&controls(&state), Some((120., 500.)), 0, -1));
+    let scroll = state.scroll;
+    assert!(scroll > 0.);
     state.pointer_focus(Target::App(favorites[0].clone()));
-    assert_eq!(state.home_scroll, scroll);
+    assert_eq!(state.scroll, scroll);
     assert!(state.hit_test(&controls(&state), 4., 600.).is_none());
     assert!(state.hit_test(&controls(&state), 1915., 600.).is_none());
-    assert!(state.hit_test(&controls(&state), 40., 1060.).is_none());
+    assert!(state.hit_test(&controls(&state), 120., 1060.).is_none());
     let scene = scene(&state);
     let viewport = state.favorites_viewport();
     assert!(scene.draw.iter().any(|draw| matches!(draw, crate::renderer::Draw::Clip(Some(rect)) if rect.x == viewport.x && rect.w == viewport.w)));
-    assert!(state.wheel_scroll(&scene.controls, Some((40., 600.)), 0, 1));
-    assert_eq!(state.home_scroll, 0.);
-    assert_eq!(state.scroll, 0.);
 }
 
 #[test]
@@ -91,7 +100,6 @@ fn widening_favorites_does_not_widen_apps_or_unclip_offscreen_rows() {
         Some(Target::App("sample".into()))
     );
     assert!(!state.wheel_scroll(&controls, Some((1860., 600.)), 0, -1));
-    assert_eq!(state.home_scroll, 0.);
     assert_eq!(state.scroll, 90.);
 }
 
@@ -605,6 +613,39 @@ fn home_and_apps_render_only_their_own_caption_preference() {
             );
         }
     }
+}
+
+#[test]
+fn long_weather_summary_stays_above_the_favorites_grid() {
+    let mut state = ready();
+    let name = "Long location ".repeat(80);
+    state.preferences.weather_location = Some(crate::weather::Location {
+        name: name.clone(),
+        region: String::new(),
+        country: String::new(),
+        latitude: 0.,
+        longitude: 0.,
+    });
+    let scene = scene(&state);
+    let text_rect = |label: &str| {
+        scene
+            .draw
+            .iter()
+            .find_map(|draw| match draw {
+                crate::renderer::Draw::Text(value, rect, ..) if value == label => Some(*rect),
+                _ => None,
+            })
+            .unwrap()
+    };
+    let weather = text_rect(&name);
+    let heading = text_rect("Favorites");
+    assert!(heading.y >= weather.y + weather.h);
+    let first = scene
+        .controls
+        .iter()
+        .find(|c| c.target == Target::App("netflix".into()))
+        .unwrap();
+    assert!(first.rect.y > heading.y + heading.h);
 }
 
 #[test]

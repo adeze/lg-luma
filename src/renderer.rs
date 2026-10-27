@@ -70,8 +70,6 @@ pub enum Draw {
     AppImage(Arc<crate::app_artwork::Artwork>, Rect, Color),
     Clip(Option<Rect>),
     EdgeFade(Option<[f32; 4]>),
-    /// Horizontal counterpart: [left fade-in start, end, right fade-out start, end].
-    EdgeFadeX(Option<[f32; 4]>),
 }
 
 struct Texture {
@@ -113,7 +111,6 @@ struct Uniforms {
     aa: GLint,
     texture: GLint,
     edge_fade: GLint,
-    edge_fade_x: GLint,
     fringe: GLint,
     embolden: GLint,
     transform: GLint,
@@ -128,7 +125,6 @@ impl Uniforms {
             aa: location(c"u_aa"),
             texture: location(c"u_texture"),
             edge_fade: location(c"u_edge_fade"),
-            edge_fade_x: location(c"u_edge_fade_x"),
             fringe: location(c"u_fringe"),
             embolden: location(c"u_embolden"),
             transform: location(c"u_transform"),
@@ -233,8 +229,7 @@ enum BatchKind {
 struct Batch {
     kind: BatchKind,
     clip: Option<Rect>,
-    // [top fade-in, top end, bottom start, bottom fade-out, left ×2, right ×2]; 0 = off.
-    fade: Option<[f32; 8]>,
+    fade: Option<[f32; 4]>,
 }
 
 fn full_screen(rect: &Rect) -> bool {
@@ -325,7 +320,7 @@ fn profile_skip(command: &Draw) -> bool {
         Draw::RoundedGradient(..) => "gradient",
         Draw::Shadow(..) => "shadow",
         Draw::Text(..) => "text",
-        Draw::Clip(_) | Draw::EdgeFade(_) | Draw::EdgeFadeX(_) => return false,
+        Draw::Clip(_) | Draw::EdgeFade(_) => return false,
     };
     skip.iter().any(|entry| entry == kind || entry == "all")
 }
@@ -373,20 +368,13 @@ pub struct Renderer {
     vertices: Vec<f32>,
     batches: Vec<Batch>,
     clip: Option<Rect>,
-    // [top fade-in, top end, bottom start, bottom fade-out, left ×2, right ×2]; 0 = off.
-    fade: Option<[f32; 8]>,
+    fade: Option<[f32; 4]>,
     frame: u64,
     stats: RenderStats,
     pub info: GraphicsInfo,
 }
 
 impl Renderer {
-    fn set_fade(&mut self, offset: usize, fade: Option<[f32; 4]>) {
-        let mut next = self.fade.unwrap_or([0.; 8]);
-        next[offset..offset + 4].copy_from_slice(&fade.unwrap_or([0.; 4]));
-        self.fade = (next != [0.; 8]).then_some(next);
-    }
-
     pub fn new(font: &Path, gles: bool, text_embolden: f32) -> Result<Self, String> {
         let directory = font.parent().ok_or("Invalid font path")?;
         let mut fonts = HashMap::new();
@@ -1276,8 +1264,7 @@ impl Renderer {
                 }
                 Draw::AppImage(image, rect, tint) => self.app_image(image, *rect, *tint),
                 Draw::Clip(clip) => self.clip = *clip,
-                Draw::EdgeFade(fade) => self.set_fade(0, *fade),
-                Draw::EdgeFadeX(fade) => self.set_fade(4, *fade),
+                Draw::EdgeFade(fade) => self.fade = *fade,
             }
         }
     }
@@ -1335,7 +1322,7 @@ impl Renderer {
                 if current_fade != Some(batch.fade) {
                     // The same cheap alpha mask applies to shapes, textures,
                     // icons and text; the unmasked wallpaper remains beneath.
-                    let fade = batch.fade.unwrap_or([0.; 8]);
+                    let fade = batch.fade.unwrap_or([0.; 4]);
                     for (program, uniforms) in [
                         (self.program, &self.uniforms),
                         (self.vector_program, &self.vector_uniforms),
@@ -1343,7 +1330,6 @@ impl Renderer {
                     ] {
                         gl::UseProgram(program);
                         gl::Uniform4f(uniforms.edge_fade, fade[0], fade[1], fade[2], fade[3]);
-                        gl::Uniform4f(uniforms.edge_fade_x, fade[4], fade[5], fade[6], fade[7]);
                     }
                     current_fade = Some(batch.fade);
                     paint_bound = false;

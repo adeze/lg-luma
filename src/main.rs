@@ -528,6 +528,13 @@ fn run() -> Result<(), String> {
         log_home_output();
     }
     let webos = cfg!(feature = "webos");
+    let hidden_capture = !webos
+        && (options.screenshot.is_some()
+            || options.dump.is_some()
+            || options.profile_frames.is_some());
+    if hidden_capture {
+        sdl2::hint::set("SDL_MAC_BACKGROUND_APP", "1");
+    }
     let startup_stage = |stage: &str| {
         if webos {
             eprintln!(
@@ -670,6 +677,9 @@ fn run() -> Result<(), String> {
     let create_window = || {
         let mut builder = video.window("Luma", requested.width, requested.height);
         builder.opengl().allow_highdpi().position_centered();
+        if hidden_capture {
+            builder.hidden();
+        }
         if options.fullscreen || (webos && options.resolution.is_none()) {
             builder.fullscreen_desktop();
         } else if webos {
@@ -1001,7 +1011,21 @@ fn run() -> Result<(), String> {
                 | Event::TextInput { .. } => true,
                 _ => false,
             };
-            if script_owns_input && external_input {
+            if (script_owns_input || hidden_capture) && external_input {
+                continue;
+            }
+            // Hidden desktop captures still render and advance scripted scenarios.
+            if hidden_capture
+                && matches!(
+                    event,
+                    Event::Window {
+                        win_event: WindowEvent::Hidden
+                            | WindowEvent::Minimized
+                            | WindowEvent::FocusLost,
+                        ..
+                    }
+                )
+            {
                 continue;
             }
             // Remote keys only reach the focused surface.
@@ -1583,7 +1607,7 @@ fn run() -> Result<(), String> {
     if let Some(path) = options.dump {
         let state = serde_json::json!({ "page": state.page, "focus": state.focus, "query": state.query,
             "filter": state.filter, "preferences": state.preferences, "apps": state.apps().iter().map(|a| &a.id).collect::<Vec<_>>(),
-            "error": state.error, "scroll": state.scroll, "home_scroll": state.home_scroll, "subpage": state.subpage, "modal": state.overlay.is_some(), "weather": state.weather,
+            "error": state.error, "scroll": state.scroll, "subpage": state.subpage, "modal": state.overlay.is_some(), "weather": state.weather,
             "inventory": state.inventory.apps,
             "recents": state.recents.entries, "recents_pending": state.recents.pending, "recents_error": state.recents.error, "recents_visibility": state.recents.visibility,
             "ui_text": scene.draw.iter().filter_map(|draw| match draw { renderer::Draw::Text(value, ..) => Some(value), _ => None }).collect::<Vec<_>>() });
@@ -1604,6 +1628,7 @@ fn run() -> Result<(), String> {
             "display_mode": display_mode,
             "drawable_is_4k": Size::new(dw, dh).is_4k(), "presented_frames": presented,
             "graphics": renderer.info, "last_presented": renderer.stats(), "capture": captured,
+            "window_hidden": window.window_flags() & sdl2::sys::SDL_WindowFlags::SDL_WINDOW_HIDDEN as u32 != 0,
             "text_rendering": text_config,
             "profile": options.profile_frames.map(|_| profile.summary()),
             "partial_redraw": partial.as_ref().map(egl_damage::PartialUpdate::describe),
