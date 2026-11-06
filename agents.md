@@ -8,7 +8,7 @@ the host SVG compiler in `tools/vector-assets/`, packaging/tooling in `tools/`, 
 scripts in `tests/`. There is no React/JSX/browser application. Read `development.md` for details.
 
 Use Bun, Oxlint and Oxfmt for build tools; Cargo/rustfmt/Clippy for Rust. `nix develop` supplies
-pinned Rust 1.99.1, ARMv7 std, Bun 1.4.4, SDL2, glslang, woff2 and Python/fontTools. The webOS
+Rust stable (resolved by the locked rust-overlay), ARMv7 std, Bun 1.4.4, SDL2, glslang, woff2 and Python/fontTools. The webOS
 SDK is separate: `bun run sdk`, then set `WEBOS_NDK` to `.build/toolchain/arm-webos-linux-gnueabi_sdk-buildroot`.
 
 ```sh

@@ -17,7 +17,7 @@
     "test": "bun run test:release && bun run test:home && bun run test:icons && bun run test:build && bun run test:shaders && cargo test --locked --workspace --all-features",
     "test:build": "bun test --timeout 60000 tests/build.test.mjs",
     "test:release": "bun test --timeout 60000 tests/release.test.mjs",
-    "test:home": "bun test --timeout 60000 tests/home-splash.test.mjs tests/home-executable.test.mjs tests/sync-splash.test.mjs",
+    "test:home": "bun test --timeout 60000 tests/home-chooser.test.mjs tests/home-splash.test.mjs tests/home-executable.test.mjs tests/sync-splash.test.mjs",
     "test:icons": "bun test --timeout 60000 tests/read-app-icon.test.mjs tests/brand-assets.test.mjs",
     "test:smoke": "bun tests/smoke.mjs && bun tests/brands-smoke.mjs && bun tests/weather-smoke.mjs && bun tests/translations-smoke.mjs",
     "test:brands": "bun tests/brands-smoke.mjs",

@@ -79,6 +79,28 @@ luna-send -i luna://com.webos.appInstallService/dev/install \
 
 ## Replacing LG Home
 
+### Home Chooser (unreleased)
+
+Luma already declares `"appCategory": ["home"]`, the selection contract for native launchers in
+[Home Chooser](https://github.com/webosbrew/home-chooser/blob/main/docs/launcher-api.md).
+It uses a full-screen window and handles Back without closing itself. Home Chooser is not required
+to install or launch Luma; Luma keeps its existing Homebrew Channel integration for app inventory
+and artwork rather than requesting Home Chooser's optional service permission.
+
+When Home Chooser becomes available, disable Luma's existing takeover, autostart and any other
+Home-button mapping first. If takeover is enabled, use its installed helper:
+
+```sh
+sh /var/lib/luma-home/home.sh disable
+```
+
+Then install and open Home Chooser, choose **Luma**, and confirm. To return to stock Home, select
+**LG Home (stock)** in Home Chooser. Do not enable Luma's takeover alongside Home Chooser: both
+would manage the Home button. Compatibility here follows the published selection contract;
+selection, repeated Home presses, app/input launch and return, standby/resume, and stock-Home
+recovery still require testing together on a rooted TV. The compatibility table above describes
+the existing takeover method, not Home Chooser validation.
+
 ### Takeover Method
 
 > [!NOTE]

@@ -29,11 +29,13 @@ bun run assets
 bun run dev
 ```
 
-The flake reads Rust 1.99.1 from `rust-toolchain.toml` and supplies Cargo/rustfmt/Clippy,
+The flake reads the stable channel from `rust-toolchain.toml` and supplies Cargo/rustfmt/Clippy,
 Bun 1.4.4, SDL2, glslang, pkg-config,
 woff2, Python/fontTools, CMake and Git. Linux includes Mesa and Xvfb. Supported Nix hosts are
 Apple Silicon macOS and ARM64/x86-64 Linux. Without Nix, supply those tools and Rust 1.99+,
 including `armv7-unknown-linux-gnueabi` for TV builds. No browser installation is needed.
+Rustup and CI track current stable; the Nix shell's stable release follows the locked
+rust-overlay revision and advances when that flake input is updated.
 
 | Command                          | Purpose                                                    |
 | -------------------------------- | ---------------------------------------------------------- |

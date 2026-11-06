@@ -33,7 +33,7 @@ jobs:
         run: bun install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: '1.99.1'
+          toolchain: 'stable'
           targets: armv7-unknown-linux-gnueabi
       - name: Install asset dependencies
         run: |
